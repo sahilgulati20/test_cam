@@ -1,7 +1,7 @@
 from flask import Flask, Response, request
 import cv2, threading, time, requests
 
-PUBLIC_URL = "https://livecam.onrender.com/upload"   # we will change later
+PUBLIC_URL = "https://test-cam-75ql.onrender.com/upload"   # we will change later
 
 app = Flask(__name__)
 latest = None
