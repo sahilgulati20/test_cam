@@ -1,38 +1,44 @@
 from flask import Flask, Response, request
-import cv2, threading, time, requests
-
-PUBLIC_URL = "https://test-cam-75ql.onrender.com/upload"   # we will change later
+from flask_socketio import SocketIO
+import cv2, base64, threading
 
 app = Flask(__name__)
-latest = None
+socketio = SocketIO(app, cors_allowed_origins="*")
 
+PUBLIC_RENDER = "https://test-cam-75ql.onrender.com/upload"
+
+# ========== CLOUD SIDE ==========
 @app.route("/")
 def home():
-    return "<h2>LIVE CAMERA</h2><img src='/video' width='700'>"
+    return """
+    <h2>LIVE CAMERA</h2>
+    <img id="v" width="720">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+    var s = io();
+    s.on("frame", d=>{
+        document.getElementById("v").src="data:image/jpeg;base64,"+d;
+    });
+    </script>
+    """
 
 @app.route("/upload", methods=["POST"])
 def upload():
-    global latest
-    latest = request.data
+    socketio.emit("frame", base64.b64encode(request.data).decode())
     return "OK"
 
-@app.route("/video")
-def video():
-    def gen():
-        global latest
-        while True:
-            if latest:
-                yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + latest + b"\r\n")
-            time.sleep(0.04)
-    return Response(gen(), mimetype="multipart/x-mixed-replace; boundary=frame")
-
+# ========== LOCAL CAMERA PUSH ==========
 def camera_sender():
     cam = cv2.VideoCapture(0)
+    cam.set(3,640)
+    cam.set(4,480)
     while True:
         ret, frame = cam.read()
-        _, img = cv2.imencode(".jpg", frame)
-        requests.post(PUBLIC_URL, data=img.tobytes())
+        _, jpg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY),50])
+        import requests
+        requests.post(PUBLIC_RENDER, data=jpg.tobytes())
 
+# ========== START ==========
 if __name__ == "__main__":
     threading.Thread(target=camera_sender).start()
-    app.run(host="0.0.0.0", port=10000)
+    socketio.run(app, host="0.0.0.0", port=10000)
